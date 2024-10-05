@@ -9,7 +9,7 @@ valid_examples_fp = "./valid_examples.txt"
 invalid_examples_fp = "./invalid_examples.txt"
 
 
-def read_lines_from_txt(fp: [str, os.PathLike]) -> List[str]:
+def read_lines_from_txt(fp: Union[str, os.PathLike]) -> List[str]:
     """
     :param fp: File path of the .txt file.
     :return: The lines of the file path removing trailing whitespaces
@@ -58,24 +58,15 @@ class ParseTree:
     Attributes:
         root: the root of the tree
     """
-    def __init__(self, root):
+    def __init__(self, root: Node):
         self.root = root
 
     def print_tree(self, node: Optional[Node] = None, level: int = 0) -> None:
-        # TODO
-        if node is None:
-            node = self.root  
-        indent = '----' * level    
-
-
-        if isinstance(node.elem, list):     # If the node's element is a list, delimit with underscores
-            
-            print(f"{indent}{'_'.join(node.elem)}")     
-        else:
-            print(f"{indent}{node.elem}")   # Otherwise, print the single element
-
-        for child in node.children:     # Recursively print each child with level+1 of indentation
-            self.print_tree(child, level + 1)
+        indent = '----' * level
+        print(f"{indent}{'_'.join(self.root.elem)}")
+        for child in self.root.children:     # Recursively print each child with level+1 of indentation
+            subtree = ParseTree(child)
+            subtree.print_tree(level = level + 1)
 
 
 
@@ -183,7 +174,7 @@ def parse_tokens(s_: str) -> Union[List[str], bool]:
     
     return tokens
 
-def read_lines_from_txt_check_validity(fp: [str, os.PathLike]) -> None:
+def read_lines_from_txt_check_validity(fp: Union[str, os.PathLike]) -> None:
     """
     Reads each line from a .txt file, and then
     parses each string  to yield a tokenized list of strings for printing, joined by _ characters
@@ -203,7 +194,7 @@ def read_lines_from_txt_check_validity(fp: [str, os.PathLike]) -> None:
 
 
 
-def read_lines_from_txt_output_parse_tree(fp: [str, os.PathLike]) -> None:
+def read_lines_from_txt_output_parse_tree(fp: Union[str, os.PathLike]) -> None:
     """
     Reads each line from a .txt file, and then
     parses each string to yield a tokenized output string, to be used in constructing a parse tree. The
@@ -221,7 +212,37 @@ def read_lines_from_txt_output_parse_tree(fp: [str, os.PathLike]) -> None:
             parse_tree2.print_tree()
 
 
+def find_parenthesis_index(tokens: List[str]) -> int:
+    level = 0
+    for i in range(1, len(tokens)):
+        if tokens[i] == "(":
+            level += 1
+        elif tokens[i] == ")":
+            if level == 0:
+                return i
+            else:
+                level -= 1
+    return -1
 
+def get_expressions(tokens: List[str]) -> List[tuple[int, List[str]]]:
+    output = []
+    i = 0
+    # rule: <expr> <expr>
+    while i < len(tokens):
+        # rule: '\' <var> <expr>
+        if tokens[i] == "\\":
+            output.append((0, tokens[i:]))
+            break
+        # rule: '(' <expr> ')'
+        elif tokens[i] == "(":
+            idx = find_parenthesis_index(tokens[i:]) # index of matching ')'
+            output.append((1, tokens[i:i+idx+1]))
+            i += idx + 1
+        # rule: <var>
+        else:
+            output.append((2, tokens[i:i+1]))
+            i += 1
+    return output
 
 def build_parse_tree_rec(tokens: List[str], node: Optional[Node] = None) -> Node:
     """
@@ -230,9 +251,26 @@ def build_parse_tree_rec(tokens: List[str], node: Optional[Node] = None) -> Node
     :param node: A Node object
     :return: a node with children whose tokens are variables, parenthesis, slashes, or the inner part of an expression
     """
-
-    #TODO
-    return Node()
+    root = Node(tokens) # start symbol: <expr> - precondition: len(tokens) > 0
+    # rule: <expr> <expr>
+    expressions = get_expressions(tokens) # get separate expressions (will be in the same tree level)
+    for token_id, expr in expressions:
+        subtree = root
+        if len(expressions) > 1:
+            subtree = Node(expr)
+            root.add_child_node(subtree)
+        # rule: '\' <var> <expr>
+        if token_id == 0:
+            subtree.add_child_node(Node([expr[0]])) # '\'
+            subtree.add_child_node(Node([expr[1]])) # <var>
+            for child in get_expressions(expr[2:]): # <expr>
+                subtree.add_child_node(build_parse_tree_rec(child[1]))
+        # rule: '(' <expr> ')'
+        elif token_id == 1:
+            subtree.add_child_node(Node([expr[0]])) # '('
+            subtree.add_child_node(build_parse_tree_rec(expr[1:-1])) # <expr>
+            subtree.add_child_node(Node([expr[-1]])) # ')'
+    return root
 
 def build_parse_tree(tokens: List[str]) -> ParseTree:
     """
