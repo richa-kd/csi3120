@@ -87,8 +87,19 @@ def parse_tokens(s_: str) -> Union[List[str], bool]:
     tokens = []
     i = 0
     close_pram_to_add = 0
-    open_parens_extra = 0
     parentheses_stack = []  # Stack to track open parentheses
+
+    # Lambda error checking: Ensure that \ is followed by a valid variable
+    if s_[0] == '\\':
+        if len(s_) == 1:  # Missing variable after lambda
+            print(f"Missing complete lambda expression starting at index {0}.")
+            return False
+        if (s_[1] == ' '):  # Space after '\'
+            print(f"Invalid space inserted after \\ at index {0}.")
+            return False
+        if not (s_[1] in alphabet_chars):  # Invalid character after '\'
+            print(f"Backslashes not followed by a variable name at {0}.")
+            return False
 
     while i < len(s_):
         char = s_[i]
@@ -96,19 +107,19 @@ def parse_tokens(s_: str) -> Union[List[str], bool]:
         # Handle lambda expressions
         if char == '\\':
             if i + 1 >= len(s_):  # No variable after '\'
-                print(f"Invalid lambda expression at {i}.")
+                print(f"Missing complete lambda expression starting at index {i}.")
                 return False
-            if not s_[i + 1].isalpha():  # Invalid variable after '\'
+            elif not (s_[i + 1] in alphabet_chars):  # Invalid variable after '\'
                 print(f"Backslashes not followed by a variable name at {i}.")
                 return False
-            if s_[i + 1].isspace():  # Space after '\'
-                print(f"Invalid space inserted after \\ at index {i}.")
+            elif len(s_)==2 or len(s_)==3:
+                print(f"Missing complete lambda expression.")
                 return False
             tokens.append('\\')
             i += 1
 
-        # Handle spaces 
-        elif char.isspace():
+        # Handle spaces
+        elif char==' ':
             i += 1
 
         # Handle open parentheses
@@ -117,22 +128,25 @@ def parse_tokens(s_: str) -> Union[List[str], bool]:
                 print(f"Missing expression for parenthesis at index {i}.")
                 return False
             tokens.append('(')
-            parentheses_stack.append(i) 
+            parentheses_stack.append(i)  # Track index of open parentheses
             i += 1
 
         # Handle close parentheses
         elif char == ')':
+            if not parentheses_stack:  # Unmatched close parenthesis
+                print(f"Bracket ) at index {i} is not matched with an opening bracket '('.")
+                return False
             tokens.append(')')
-            if not parentheses_stack:  # Check for unmatched close parentheses
-                print(f"Bracket ) at index: {i} is not matched with an opening bracket '('.")
-                return False  # Stop processing invalid input
             parentheses_stack.pop()  # Pop the last open parenthesis
             i += 1
 
-        # Replace dots with open parentheses
+        # Handle dots
         elif char == '.':
-            if len(tokens) == 0 or tokens[-1] == '(':  
+            if len(tokens) == 0 or tokens[-1] == '(':  # Dot cannot come after '(' or at the beginning
                 print(f"Must have a variable name before character '.' at index {i}.")
+                return False
+            if (s_[i - 1] == ' '):  # Dot after space should not be valid
+                print(f"Encountered dot at invalid index {i}.")
                 return False
             tokens.append('(')
             close_pram_to_add += 1
@@ -145,33 +159,30 @@ def parse_tokens(s_: str) -> Union[List[str], bool]:
             while i < len(s_) and s_[i] in var_chars:
                 var += s_[i]
                 i += 1
+            if not is_valid_var_name(var):
+                print(f"Error at index {i}, invalid variable name '{var}'.")
+                return False
             tokens.append(var)
 
         # Handle invalid characters
-        elif char.isdigit() and len(tokens) == 0:  # Invalid variable starting with digits
+        elif (char in numeric_chars) and len(tokens) == 0:  # Invalid variable starting with digits
             print(f"Error at index {i}, variables cannot begin with digits.")
             return False
         else:
             print(f"Error at index {i} with invalid character '{char}'.")
             return False
 
-    # Check for unmatched opening parentheses
-    while parentheses_stack:
+    # Ensure no unmatched opening parentheses are left
+    if parentheses_stack:
         unmatched_index = parentheses_stack.pop()
-        print(f"Bracket ( at index: {unmatched_index} is not matched with a closing bracket ')'.")
+        print(f"Bracket ( at index {unmatched_index} is not matched with a closing bracket ')'.")
         return False
 
-    # Check if a lambda expression is incomplete (e.g., \x without an expression)
-    if '\\' in tokens and len(tokens) < 3:
-        print("Missing complete lambda expression starting at index " + str(tokens.index('\\')) + ".")
-        return False
+    # Add the necessary closing parentheses for dots
+    for _ in range(close_pram_to_add):
+        tokens.append(')')
 
-    # Adding the necessary closing parentheses after dots
-    if close_pram_to_add != 0:
-        for _ in range(close_pram_to_add):
-            tokens.append(')')
-
-    
+    # Return the tokenized string
     return tokens
 
 def read_lines_from_txt_check_validity(fp: Union[str, os.PathLike]) -> None:
