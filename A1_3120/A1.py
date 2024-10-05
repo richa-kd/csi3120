@@ -180,6 +180,7 @@ def read_lines_from_txt_check_validity(fp: Union[str, os.PathLike]) -> None:
     parses each string  to yield a tokenized list of strings for printing, joined by _ characters
     In the case of a non-valid line, the corresponding error message is printed (not necessarily within
     this function, but possibly within the parse_tokens function).
+
     :param fp: The file path of the lines to parse
     """
     lines = read_lines_from_txt(fp)
@@ -201,6 +202,7 @@ def read_lines_from_txt_output_parse_tree(fp: Union[str, os.PathLike]) -> None:
     parse tree should call print_tree() to print its content to the console.
     In the case of a non-valid line, the corresponding error message is printed (not necessarily within
     this function, but possibly within the parse_tokens function).
+
     :param fp: The file path of the lines to parse
     """
     lines = read_lines_from_txt(fp)
@@ -213,6 +215,15 @@ def read_lines_from_txt_output_parse_tree(fp: Union[str, os.PathLike]) -> None:
 
 
 def find_parenthesis_index(tokens: List[str]) -> int:
+    """
+    Finds the index of the closing bracket that matches the opening bracket in the beginning of the list of tokens.
+
+    Precondition: the first element in the list of tokens must be '('
+
+    :param tokens: A list of token strings
+    :return: the index of the matching closing bracket
+    :raises ValueError: if there is no such closing bracket
+    """
     level = 0
     for i in range(1, len(tokens)):
         if tokens[i] == "(":
@@ -222,40 +233,53 @@ def find_parenthesis_index(tokens: List[str]) -> int:
                 return i
             else:
                 level -= 1
-    return -1
+    raise ValueError("no corresponding closing bracket found")
 
 def get_expressions(tokens: List[str]) -> List[tuple[int, List[str]]]:
+    """
+    Gets a list of 2-tuples of token id and sublist of tokens by partitioning the list of tokens into sublists that
+    correspond to a certain type of expression. The type of expression is denoted by a token id as follows:
+    - token id = 0: the lambda expression
+    - token id = 1: the expression enclosed by 2 brackets
+    - token id = 2: the variable expression
+
+    :param tokens: A list of token strings
+    :return: a list of 2-tuples of a token id and an expression belonging to a certain id
+    """
     output = []
     i = 0
     # rule: <expr> <expr>
     while i < len(tokens):
         # rule: '\' <var> <expr>
         if tokens[i] == "\\":
-            output.append((0, tokens[i:]))
+            output.append((0, tokens[i:])) # take every tokens as a whole lambda expression
             break
         # rule: '(' <expr> ')'
         elif tokens[i] == "(":
             idx = find_parenthesis_index(tokens[i:]) # index of matching ')'
-            output.append((1, tokens[i:i+idx+1]))
+            output.append((1, tokens[i:i+idx+1])) # take every tokens starting from '(' to ')'
             i += idx + 1
         # rule: <var>
         else:
-            output.append((2, tokens[i:i+1]))
+            output.append((2, tokens[i:i+1])) # take only one token as a separate expression
             i += 1
     return output
 
 def build_parse_tree_rec(tokens: List[str], node: Optional[Node] = None) -> Node:
     """
     An inner recursive inner function to build a parse tree
+
     :param tokens: A list of token strings
     :param node: A Node object
     :return: a node with children whose tokens are variables, parenthesis, slashes, or the inner part of an expression
     """
     root = Node(tokens) # start symbol: <expr> - precondition: len(tokens) > 0
     # rule: <expr> <expr>
-    expressions = get_expressions(tokens) # get separate expressions (will be in the same tree level)
+    expressions = get_expressions(tokens) # get separate expressions (they will be in the same tree level)
+    # additional pointer to a node in case of branching out
+    subtree = root
     for token_id, expr in expressions:
-        subtree = root
+        # if there are more than 1 expressions, branch out of the root
         if len(expressions) > 1:
             subtree = Node(expr)
             root.add_child_node(subtree)
@@ -264,17 +288,22 @@ def build_parse_tree_rec(tokens: List[str], node: Optional[Node] = None) -> Node
             subtree.add_child_node(Node([expr[0]])) # '\'
             subtree.add_child_node(Node([expr[1]])) # <var>
             for child in get_expressions(expr[2:]): # <expr>
+                # the expressions following the lambda will be on the same tree level as '\' and <var>
                 subtree.add_child_node(build_parse_tree_rec(child[1]))
         # rule: '(' <expr> ')'
         elif token_id == 1:
             subtree.add_child_node(Node([expr[0]])) # '('
             subtree.add_child_node(build_parse_tree_rec(expr[1:-1])) # <expr>
             subtree.add_child_node(Node([expr[-1]])) # ')'
+        # rule: <var> (no need to add any child nodes)
+        else:
+            pass
     return root
 
 def build_parse_tree(tokens: List[str]) -> ParseTree:
     """
     Build a parse tree from a list of tokens
+
     :param tokens: List of tokens
     :return: parse tree
     """
